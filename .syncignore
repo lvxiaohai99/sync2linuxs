@@ -1,0 +1,146 @@
+# 同步排除规则（类似 .gitignore）
+#
+# 语法：
+#   - 每行一个规则
+#   - # 开头的是注释
+#   - 支持通配符：* 匹配任意字符，** 匹配任意目录层级
+#   - 以 / 结尾表示只匹配目录
+#   - ! 开头表示不排除（白名单，但 rclone 不支持，需手动处理）
+#
+# 示例：
+#   build/          - 排除所有 build 目录
+#   **/build/       - 排除任意深度的 build 目录
+#   *.o             - 排除所有 .o 文件
+#   temp*.log       - 排除 temp 开头 .log 结尾的文件
+
+# ============ 编译产物 ============
+# C/C++ 编译产物
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+
+# CMake 构建目录和产物
+build/
+Build/
+BUILD/
+cmake-build-*/
+**/build/
+**/Build/
+**/BUILD/
+compile_commands.json        # CMake 编译数据库（编译产物）
+**/compile_commands.json
+
+# Make 中间文件
+*.d
+*.dep
+
+# ============ 安装目录 ============
+install/
+Install/
+INSTALL/
+**/install/
+**/Install/
+**/INSTALL/
+
+# ============ IDE 和编辑器 ============
+# VS Code
+.vscode/
+*.code-workspace
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.sln.docstates
+*.vcxproj.user
+
+# CLion / JetBrains
+.idea/
+cmake-build-*/
+
+# Eclipse
+.project
+.cproject
+.settings/
+
+# Vim
+*.swp
+*.swo
+*~
+.*.sw?
+
+# ============ 版本控制 ============
+# Git（如果需要同步 .git，删除此行）
+.git/
+*.orig
+
+# SVN
+.svn/
+
+# ============ 临时文件 ============
+tmp/
+temp/
+*.tmp
+*.temp
+*.log
+*.cache
+.DS_Store
+Thumbs.db
+
+# ============ 语言特定 ============
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+*.egg-info/
+dist/
+.pytest_cache/
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Rust
+target/
+Cargo.lock  # 如果是库项目，删除此行
+
+# Go
+vendor/
+
+# Java
+*.class
+target/
+*.jar
+*.war
+
+# ============ 特定问题目录 ============
+# 已知有符号链接循环的工具链目录
+jgzd_git/utils/rk3576-cross-toolchain/
+
+# ============ 其他大文件/二进制 ============
+# 大型数据文件（根据需要调整）
+*.bin
+*.dat
+*.dump
+*.iso
+*.img
+
+# 压缩包（如果不需要同步）
+# *.zip
+# *.tar
+# *.tar.gz
+# *.rar
+
+# ============ 自定义规则 ============
+# 在此添加你的自定义排除规则

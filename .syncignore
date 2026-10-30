@@ -26,33 +26,62 @@
 *.out
 *.app
 
-# CMake 构建目录和产物
+# CMake 构建目录和产物（含 build-debug 等带后缀目录）
 build/
 Build/
 BUILD/
+build-*/
+Build-*/
+BUILD-*/
 cmake-build-*/
 **/build/
 **/Build/
 **/BUILD/
-compile_commands.json        # CMake 编译数据库（编译产物）
+**/build-*/
+**/Build-*/
+**/BUILD-*/
+# CMake 编译数据库（编译产物）
+compile_commands.json
 **/compile_commands.json
 
 # Make 中间文件
 *.d
 *.dep
 
-# ============ 安装目录 ============
+# ============ 安装目录（含 install-debug 等带后缀目录） ============
 install/
 Install/
 INSTALL/
+install-*/
+Install-*/
+INSTALL-*/
 **/install/
 **/Install/
 **/INSTALL/
+**/install-*/
+**/Install-*/
+**/INSTALL-*/
 
 # ============ IDE 和编辑器 ============
 # VS Code
 .vscode/
 *.code-workspace
+
+# clangd：一端可能是文件、一端是目录，同步会致命失败；索引/.partial 也不该同步
+# rclone 要同时排除「目录本身」和「目录内所有内容」
+.clangd
+.clangd/
+.clangd/**
+.clangd.*
+**/.clangd
+**/.clangd/
+**/.clangd/**
+**/.clangd.*
+*.partial
+**/*.partial
+# clangd/语言服务本地缓存
+.cache/
+**/.cache/
 
 # Visual Studio
 .vs/
@@ -77,12 +106,16 @@ cmake-build-*/
 .*.sw?
 
 # ============ 版本控制 ============
-# Git（如果需要同步 .git，删除此行）
+# Git（嵌套仓库也要排除；只写 .git/ 时 rclone 可能漏掉子目录里的 .git）
 .git/
+.git/**
+**/.git/
+**/.git/**
 *.orig
 
 # SVN
 .svn/
+**/.svn/
 
 # ============ 临时文件 ============
 tmp/
@@ -113,7 +146,8 @@ npm-debug.log*
 
 # Rust
 target/
-Cargo.lock  # 如果是库项目，删除此行
+# 如果是库项目，可删除下一行以同步 Cargo.lock
+Cargo.lock
 
 # Go
 vendor/
@@ -127,6 +161,27 @@ target/
 # ============ 特定问题目录 ============
 # 已知有符号链接循环的工具链目录
 jgzd_git/utils/rk3576-cross-toolchain/
+
+# --- 原则：只同步「源码/文档/配置」；不扫 SDK整仓、编译输出、预编译工具链、第三方解压包 ---
+
+# iot_vst：目录里几乎只有 forrepo（完整板级 SDK）
+# forrepo 内含 buildroot/kernel/u-boot/chromium/output/prebuilts… 文件可达数百万
+# 这类仓应用 git clone / 单独拷贝，不要走日常 bisync
+jgzd_git/iot_vst/
+**/iot_vst/forrepo/
+**/buildroot/
+**/prebuilts/
+**/output/
+
+# mt 第三方测量包（deb/解压产物，体积大且非源码）
+jgzd_git/mt/_thirdparty_measure/
+**/_thirdparty_measure/
+
+# 本机 AI/编辑器工作区状态（各端各自生成）
+.cursor/
+**/.cursor/
+.qoder/
+**/.qoder/
 
 # ============ 其他大文件/二进制 ============
 # 大型数据文件（根据需要调整）
@@ -143,4 +198,6 @@ jgzd_git/utils/rk3576-cross-toolchain/
 # *.rar
 
 # ============ 自定义规则 ============
+# 若 obu/libafl 也不需要同步、且体积很大，取消下一行注释：
+# obu/libafl/
 # 在此添加你的自定义排除规则

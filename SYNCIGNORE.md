@@ -50,8 +50,14 @@ temp*.log           # 支持通配符
 ### 版本控制
 - `.git/`, `.svn/` - 版本控制目录
 
-### 特定问题
+### 特定问题 / 巨型仓（务必排除，否则整体同步会扫几百万文件）
+- `jgzd_git/iot_vst/` - 板级 SDK（forrepo：buildroot/kernel/chromium/output…）
+- `jgzd_git/mt/_thirdparty_measure/` - 第三方 deb/解压包
 - `jgzd_git/utils/rk3576-cross-toolchain/` - 已知有符号链接循环的目录
+- `**/buildroot/`、`**/prebuilts/`、`**/output/` - SDK/构建输出通用名
+- `.cursor/`、`.qoder/` - 本机 AI 工作区状态
+
+**原则：** 日常 bisync 只同步源码/文档/配置；完整 SDK、工具链、编译产物用 git 或单独拷贝。
 
 ## 使用方法
 

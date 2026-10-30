@@ -39,17 +39,16 @@ $excludeArgs = @()
 if (Test-Path $syncIgnoreFile) {
     Write-Host "`n读取排除规则: $syncIgnoreFile"
     $rules = Get-Content $syncIgnoreFile -Encoding UTF8 |
-        Where-Object { $_ -match '\S' } |  # 非空行
-        Where-Object { $_ -notmatch '^\s*#' }  # 非注释行
+        Where-Object { $_ -match '\S' } |
+        Where-Object { $_ -notmatch '^\s*#' } |
+        ForEach-Object { ($_ -replace '\s+#.*$', '').Trim() } |
+        Where-Object { $_ }
 
     $excludeCount = 0
     foreach ($rule in $rules) {
-        $rule = $rule.Trim()
-        if ($rule) {
-            $excludeArgs += '--exclude'
-            $excludeArgs += $rule
-            $excludeCount++
-        }
+        $excludeArgs += '--exclude'
+        $excludeArgs += $rule
+        $excludeCount++
     }
     Write-Host "已加载 $excludeCount 条排除规则" -ForegroundColor Green
 } else {

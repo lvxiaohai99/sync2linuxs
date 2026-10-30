@@ -49,6 +49,7 @@
 sync2linuxs/
 ├── deploy.ps1          # 一键部署（需管理员）
 ├── sync.ps1            # 日常双向同步（定时任务调用）
+├── sync-force.ps1      # 删除保护触发后，手动确认再强制同步
 ├── test-resync.ps1     # 清空状态并强制 --resync
 ├── .syncignore         # 同步排除规则（类似 .gitignore）
 ├── .gitignore          # Git 忽略：logs、rclone.exe 等
@@ -125,7 +126,7 @@ cd sync2linuxs
 1. 检查依赖（SSH、同步目录、rclone）
 2. 写入 rclone SFTP 配置
 3. 首次 `--resync` 建立基准
-4. 创建 Windows 定时任务（默认每 15 分钟）
+4. 创建 Windows 定时任务（默认每天 09:20、18:00）
 5. 打印后续操作说明
 
 ### 3. 手动测试同步
@@ -194,7 +195,7 @@ Get-ChildItem .\logs\*.log |
 ### 任务信息
 
 - **任务名称：** `RcloneBisync-ServerA-ServerB`
-- **执行间隔：** 每 15 分钟
+- **执行时间：** 每天 **09:20**、**18:00**（各一次）
 - **执行脚本：** 项目根目录下的 `sync.ps1`
 - **权限级别：** 最高权限（Highest）
 - **超时时间：** 30 分钟
@@ -235,14 +236,13 @@ Start-ScheduledTask -TaskName "RcloneBisync-ServerA-ServerB"
 Unregister-ScheduledTask -TaskName "RcloneBisync-ServerA-ServerB" -Confirm:$false
 ```
 
-**修改执行间隔：**
+**修改执行时间：**
 
 ```powershell
-# 改为每 30 分钟
-$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-    -RepetitionInterval (New-TimeSpan -Minutes 30) `
-    -RepetitionDuration ([TimeSpan]::MaxValue)
-Set-ScheduledTask -TaskName "RcloneBisync-ServerA-ServerB" -Trigger $trigger
+# 示例：改回每天 09:20 和 18:00
+$t1 = New-ScheduledTaskTrigger -Daily -At '09:20'; $t1.Enabled = $true
+$t2 = New-ScheduledTaskTrigger -Daily -At '18:00'; $t2.Enabled = $true
+Set-ScheduledTask -TaskName "RcloneBisync-ServerA-ServerB" -Trigger @($t1, $t2)
 ```
 
 ### 打开任务计划程序图形界面
@@ -293,18 +293,41 @@ $ConflictMode = 'keep-both'  # 修改这一行
 
 ## 常见问题
 
-### 1. 同步失败：exit code 7
+### 1. 同步失败 / 中止：too many deletes（删除保护）
+
+**原因：** 单次同步要删除的文件超过 `--max-delete`（默认 25%）。这是防误删保险丝，**不会真的删文件**。  
+日常 `sync.ps1` / 定时任务**不会**自动加 `--force`；触发时终端会打印黄色提示框和下面这条命令。
+
+**若确认就是要大删、另一端也要跟上：**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File D:\code_sync\sync-force.ps1
+```
+
+按提示输入 `YES` 后，会带 `--force` 再同步一次。
+
+| 你的真实意图 | 做法 |
+|-------------|------|
+| 故意大删，另一端跟上 | 运行上面的 `sync-force.ps1`，输入 `YES` |
+| 误删了，另一端还有 | **不要**跑 force；先从正确端拷回 |
+| 只是改了排除规则 | 执行 `.\test-resync.ps1` |
+
+```powershell
+# 查看是否触发了删除保护
+Select-String -Path .\logs\bisync-$(Get-Date -Format 'yyyyMMdd').log -Pattern "too many deletes|Safety abort"
+```
+
+### 1b. 同步失败：exit code 7
 
 **原因：**
 - 网络中断
-- 触发了 `--max-delete` 保护（单次要删除超过 25% 的文件）
 - bisync 状态文件损坏
 
 **解决方法：**
 
 ```powershell
 # 查看详细错误
-Get-Content .\logs\bisync-$(Get-Date -Format 'yyyyMMdd').log
+Get-Content .\logs\bisync-$(Get-Date -Format 'yyyyMMdd').log -Tail 50
 
 # 如果是状态文件损坏，重新初始化
 .\test-resync.ps1
@@ -326,16 +349,16 @@ Get-Content .\logs\bisync-$(Get-Date -Format 'yyyyMMdd').log
 - 这是正常的，bisync 依赖修改时间判断是否需要同步
 - 确保两台服务器时间同步（NTP）
 
-### 4. 想要实时同步（而不是每 15 分钟）
+### 4. 想改同步频率（默认每天两次）
 
 **方案：**
-- 方案 1：修改定时任务间隔为 1 分钟
-- 方案 2：使用 Syncthing（需要在两台服务器和本机都安装）
+- 方案 1：改计划任务触发时间（见上方「修改执行时间」）
+- 方案 2：需要更频繁时可用短间隔重复触发；要近实时可用 Syncthing
 
 ```powershell
-# 修改为每 1 分钟
+# 示例：临时改为每 30 分钟（测试完建议改回每天 09:20 / 18:00）
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-    -RepetitionInterval (New-TimeSpan -Minutes 1) `
+    -RepetitionInterval (New-TimeSpan -Minutes 30) `
     -RepetitionDuration ([TimeSpan]::MaxValue)
 Set-ScheduledTask -TaskName "RcloneBisync-ServerA-ServerB" -Trigger $trigger
 ```
@@ -366,6 +389,43 @@ Start-ScheduledTask -TaskName "RcloneBisync-ServerA-ServerB"
 - 从另一台服务器手动复制文件回来
 - 检查 rclone 的 bisync 状态文件（可能有历史记录）
 
+### 8. 日志里 Transferred 0 B，但 Checks/Listed 上百万、跑十几分钟
+
+**多数情况仍正常卡在「扫目录」阶段**：还没开始传文件，所以是 `0 B`。  
+但若 **Listed 达到几百万**（以前通常只有几万），就不正常了——多半扫进了不该同步的巨型树。
+
+**2026-10-30 实例：** `jgzd_git/iot_vst/forrepo/`（含 buildroot、kernel、chromium 等）把 Path2 列表撑到约 **840MB**，同步会极慢。已在 `.syncignore` 排除该目录。
+
+处理：改完忽略规则后执行一次 `.\test-resync.ps1`（或等脚本因无成功状态自动 `--resync`），不要让定时任务继续硬扛几百万文件。
+
+### 9. 日志写「首次运行 / --resync」，但我已经同步很多天了
+
+**原因：** 不是真的第一次。`sync.ps1` 靠本机状态文件判断：
+
+`C:\Users\<你>\AppData\Local\rclone\bisync\*.path1.lst`
+
+上次若出现 **致命错误**（例如 SFTP 重命名 `.clangd.*.partial` 失败），rclone 会把状态改成 `*.lst-err`，并要求必须 `--resync` 才能恢复。此时没有成功的 `*.path1.lst`，脚本就会自动带 `--resync`——以前文案误写成「首次运行」。
+
+**处理：**
+1. 已排除 `.clangd` / `*.partial`，减少这类失败
+2. 让下一次带 `--resync` 的同步跑成功即可；成功后会重新生成 `*.path1.lst`，之后恢复日常增量同步
+3. 若反复因同一文件失败，先在两端删掉残留的 `*.partial`，再跑一次同步
+
+### 10. 同步失败：prior lock file found
+
+**原因：** 上次 rclone bisync 被强制结束或崩溃，留下了 `.lck` 锁文件，后续同步会立刻失败。
+
+**解决方法：**
+1. 优先直接再跑一次 `.\sync.ps1`（脚本会自动识别僵死锁并清除）
+2. 若仍报错，可手动删除锁文件后重试：
+
+```powershell
+Remove-Item -Force "$env:LOCALAPPDATA\rclone\bisync\serverA_sync..serverB_sync.lck"
+powershell -ExecutionPolicy Bypass -File .\sync.ps1
+```
+
+注意：只有确认没有其他同步正在跑时才能删锁。
+
 ---
 
 ## 文件说明
@@ -375,7 +435,8 @@ Start-ScheduledTask -TaskName "RcloneBisync-ServerA-ServerB"
 | 文件 | 说明 |
 |------|------|
 | [deploy.ps1](deploy.ps1) | 一键部署脚本，完成所有初始化配置 |
-| [sync.ps1](sync.ps1) | 主同步脚本，由定时任务每 15 分钟执行一次 |
+| [sync.ps1](sync.ps1) | 主同步脚本，由定时任务每天 09:20 / 18:00 执行 |
+| [sync-force.ps1](sync-force.ps1) | 删除保护触发后，确认再强制同步一次（手动） |
 | [test-resync.ps1](test-resync.ps1) | 测试脚本，清空状态重新 resync |
 | [README.md](README.md) | 本文档 |
 | [sync-plan.md](sync-plan.md) | 技术方案设计文档 |
@@ -431,9 +492,11 @@ $ConnectTimeout = 10                   # 网络检测超时（秒）
 | 密钥路径本机相关 | 部署前必须按本机改 `deploy.ps1` |
 | rclone 不进仓库 | 克隆后需按 `bin/README.md` 下载 |
 | 仅 Windows 中转 | 依赖本机在线与任务计划；本机关机则暂停同步 |
-| 冲突策略默认 `newer` | 依赖两端时间准确；更稳妥可改 `keep-both` |
+| 冲突策略可配置 | 当前默认见 `sync.ps1` 的 `$ConflictMode`；两端时钟不准时更稳妥用 `keep-both` |
+| 僵死锁已自动清理 | `sync.ps1` 会检查 `.lck` 对应 PID，进程已退出则删除锁；仍失败见 FAQ §8 |
+| `.syncignore` 行内注释 | 已支持剥离规则后方的 `# 注释`，避免传给 rclone |
 
 ---
 
-**版本：** 1.1  
-**最后更新：** 2026-10-16
+**版本：** 1.8  
+**最后更新：** 2026-10-30

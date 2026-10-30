@@ -44,9 +44,9 @@ $RcloneExe   = Join-Path $ProjectDir 'bin\rclone.exe'
 $SyncScript  = Join-Path $ProjectDir 'sync.ps1'
 $LogDir      = Join-Path $ProjectDir 'logs'
 
-# 定时任务配置
-$TaskName    = 'RcloneBisync-ServerA-ServerB'
-$TaskInterval = 15  # 分钟
+# 定时任务配置（每天两次，不再按分钟轮询）
+$TaskName     = 'RcloneBisync-ServerA-ServerB'
+$TaskTimes    = @('09:20', '18:00')  # 本地时间
 
 # ====================================================
 
@@ -271,9 +271,12 @@ sha1sum_command = sha1sum
     $action = New-ScheduledTaskAction -Execute "powershell.exe" `
         -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$SyncScript`""
 
-    $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-        -RepetitionInterval (New-TimeSpan -Minutes $TaskInterval) `
-        -RepetitionDuration ([TimeSpan]::MaxValue)
+    # 每天固定时刻触发（多触发器时，第二个起需显式 Enabled=$true，否则 PowerShell 会默认为禁用）
+    $triggers = foreach ($t in $TaskTimes) {
+        $tr = New-ScheduledTaskTrigger -Daily -At $t
+        $tr.Enabled = $true
+        $tr
+    }
 
     $settings = New-ScheduledTaskSettingsSet `
         -StartWhenAvailable `
@@ -286,13 +289,13 @@ sha1sum_command = sha1sum
 
     Register-ScheduledTask -TaskName $TaskName `
         -Action $action `
-        -Trigger $trigger `
+        -Trigger $triggers `
         -Settings $settings `
         -Principal $principal `
-        -Description "双向同步服务器 A ($($ServerA.Host)) 和服务器 B ($($ServerB.Host)) 的 sync 目录" | Out-Null
+        -Description "双向同步服务器 A ($($ServerA.Host)) 和服务器 B ($($ServerB.Host)) 的 sync 目录；每天 $($TaskTimes -join '、')" | Out-Null
 
     Write-Log "  ✓ 定时任务已创建: $TaskName" 'OK'
-    Write-Log "  执行间隔: 每 $TaskInterval 分钟" 'INFO'
+    Write-Log "  执行时间: 每天 $($TaskTimes -join '、')" 'INFO'
     Write-Log "  执行脚本: $SyncScript" 'INFO'
 
     # ==================== 步骤 5: 验证部署 ====================
